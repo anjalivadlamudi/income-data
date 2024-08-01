@@ -7,336 +7,246 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://d3js.org/d3.v6.min.js"></script>
     <style>
-        .slide { display: none; }
-        .active-slide { display: block; }
-        .tooltip {
+        .bar {
+            fill: steelblue;
+        }
+        .bar:hover {
+            fill: orange;
+        }
+        .axis-label {
+            font-size: 12px;
+        }
+        #tooltip {
             position: absolute;
-            text-align: left;
-            width: auto;
-            height: auto;
-            padding: 8px;
+            text-align: center;
+            width: 120px;
+            height: 50px;
+            padding: 2px;
             font: 12px sans-serif;
             background: lightsteelblue;
             border: 0px;
             border-radius: 8px;
             pointer-events: none;
+            opacity: 0;
         }
     </style>
 </head>
 <body>
-    <div id="slides"></div>
-    <button id="prev">Previous</button>
-    <button id="next">Next</button>
-    <div id="tooltip" class="tooltip" style="opacity: 0;"></div>
+    <div id="slides">
+        <div class="slide" id="slide1">
+            <h1>Introduction</h1>
+            <p><ul>
+                <li>In this narrative visualization, I am trying to communicate how income levels can vary based on your gender, age, and education level.</li>
+                <li>It is important to recognize how different genders and education levels will end up in different income statuses.</li>
+                <li>Income is affected by your education level, gender, and job. People with higher education usually earn more because they can get better-paying jobs.</li>
+                <li>However, there is still a gender pay gap, with women often making less than men for the same work.</li>
+                <li>Your occupation also matters; jobs in technology, finance, and medicine generally pay more than jobs in education, social work, or retail.</li>
+                <li>So, your income depends on a mix of how much education you have, whether you're male or female, and the type of job you do.</li>
+            </ul></p>
+            <img src="https://thumbs.dreamstime.com/b/income-inequality-abstract-concept-vector-illustration-country-distribution-financial-gender-discrimination-social-economic-gini-311438151.jpg" alt="Income Levels">
+            <button onclick="showSlide(2)">Next</button>
+        </div>
+
+        <div class="slide" id="slide2">
+            <h1>Pie Chart of Education Levels</h1>
+            <svg id="educationPieChart" width="500" height="500"></svg>
+            <button onclick="showSlide(1)">Previous</button>
+            <button onclick="showSlide(3)">Next</button>
+        </div>
+
+        <div class="slide" id="slide3">
+            <h1>Bar Chart of Age Buckets vs Income</h1>
+            <svg id="ageIncomeBarChart" width="600" height="400"></svg>
+            <button onclick="showSlide(2)">Previous</button>
+            <button onclick="showSlide(4)">Next</button>
+        </div>
+
+        <div class="slide" id="slide4">
+            <h1>Pie Chart of Income by Education Level</h1>
+            <label for="educationSelect">Select Education Level:</label>
+            <select id="educationSelect"></select>
+            <svg id="incomePieChart" width="500" height="500"></svg>
+            <button onclick="showSlide(3)">Previous</button>
+            <button onclick="showSlide(1)">Next</button>
+        </div>
+    </div>
+
+    <div id="tooltip"></div>
 
     <script>
-        const margin = { top: 20, right: 30, bottom: 40, left: 50 };
-        const width = 800 - margin.left - margin.right;
-        const height = 500 - margin.top - margin.bottom;
+        const width = 500;
+        const height = 500;
+        const radius = Math.min(width, height) / 2;
+        const color = d3.scaleOrdinal(d3.schemeCategory10);
 
         d3.csv("adult.csv").then(data => {
-            // Create age buckets
+            // Create ageBucket and incomeBool fields
             data.forEach(d => {
                 d.ageBucket = Math.floor(d.age / 10) * 10 + "-" + (Math.floor(d.age / 10) * 10 + 9);
+                // d.ageBucket = Math.floor(d.age / 10) * 10;
+                d.incomeBool = d.income === "<=50K" ? 0 : 1;
             });
-            data.forEach(d => {
-                if (d.income === " <=50K") {
-                    d.incomeBool = 0;
-                } else {
-                    d.incomeBool = 1;
-                }
+
+            // Pie Chart for Education Levels
+            const educationCounts = d3.rollup(data, v => v.length, d => d.education);
+            const pieData = Array.from(educationCounts, ([key, value]) => ({ key, value }));
+
+            const pie = d3.pie().value(d => d.value);
+            const arc = d3.arc().innerRadius(0).outerRadius(radius);
+
+            const educationPieChartSvg = d3.select("#educationPieChart").append("g").attr("transform", `translate(${width / 2},${height / 2})`);
+
+            const educationSlices = educationPieChartSvg.selectAll("path")
+                .data(pie(pieData))
+                .enter().append("path")
+                .attr("d", arc)
+                .attr("fill", d => color(d.data.key))
+                .on("mouseover", function(event, d) {
+                    d3.select("#tooltip")
+                        .style("opacity", 1)
+                        .html(`Education Level: ${d.data.key}<br>Frequency: ${d.data.value}`);
+                })
+                .on("mousemove", function(event) {
+                    d3.select("#tooltip")
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function() {
+                    d3.select("#tooltip").style("opacity", 0);
+                });
+
+            // Bar Chart for Age Buckets vs Income
+            const margin = { top: 20, right: 30, bottom: 40, left: 40 };
+            const barWidth = 600 - margin.left - margin.right;
+            const barHeight = 400 - margin.top - margin.bottom;
+
+            const svg = d3.select("#ageIncomeBarChart")
+                .attr("width", barWidth + margin.left + margin.right)
+                .attr("height", barHeight + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            const ageIncomeCounts = d3.rollup(data, v => v.length, d => d.ageBucket, d => d.incomeBool);
+
+            const processedData = Array.from(ageIncomeCounts, ([ageBucket, incomeMap]) => ({
+                ageBucket,
+                incomeTrue: incomeMap.get(1) || 0,
+                incomeFalse: incomeMap.get(0) || 0
+            }));
+
+            const x = d3.scaleBand()
+                .domain(processedData.map(d => d.ageBucket))
+                .range([0, barWidth])
+                .padding(0.1);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(processedData, d => d.incomeTrue + d.incomeFalse)])
+                .nice()
+                .range([barHeight, 0]);
+
+            svg.append("g")
+                .selectAll(".bar")
+                .data(processedData)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.ageBucket))
+                .attr("y", d => y(d.incomeTrue + d.incomeFalse))
+                .attr("width", x.bandwidth())
+                .attr("height", d => barHeight - y(d.incomeTrue + d.incomeFalse))
+                .attr("fill", "steelblue")
+                .on("mouseover", function(event, d) {
+                    d3.select("#tooltip")
+                        .style("opacity", 1)
+                        .html(`Age Bucket: ${d.ageBucket}<br>Income >50K: ${d.incomeTrue}<br>Income<=50K: ${d.incomeFalse}`);
+                })
+                .on("mousemove", function(event) {
+                    d3.select("#tooltip")
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function() {
+                    d3.select("#tooltip").style("opacity", 0);
+                });
+
+            svg.append("g")
+                .attr("class", "x-axis")
+                .attr("transform", `translate(0,${barHeight})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("class", "axis-label")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "end");
+
+            svg.append("g")
+                .attr("class", "y-axis")
+                .call(d3.axisLeft(y))
+                .append("text")
+                .attr("class", "axis-label")
+                .attr("y", -10)
+                .attr("x", -barHeight / 2)
+                .attr("dy", ".75em")
+                .attr("transform", "rotate(-90)")
+                .style("text-anchor", "middle")
+                .text("Count");
+
+            // Dropdown for Education Levels
+            const educationLevels = Array.from(educationCounts.keys());
+            const educationSelect = d3.select("#educationSelect");
+
+            educationLevels.forEach(level => {
+                educationSelect.append("option").text(level).attr("value", level);
             });
-            // Create slides for different visualizations
-// const slidesData = [
-//     { title: "Age Buckets vs Income", paragraph: "sample" key: "ageBucket", type: "bar", yKey: "income" },
-//     { title: "Education Level Distribution sample better code", key: "education", type: "pie" },
-//     { title: "Education Level Distribution", key: "education", type: "pie" },
-//     { title: "Education vs Count of Income", key: "education.num", type: "bar", yKey: "incomeBool" }
-// ];
-const slidesData = [
-            { title: "Introduction", paragraph: "This is the introduction" },
-            { title: "Age Buckets vs Income", key: "ageBucket", type: "bar", yKey: "income", paragraph: "This slide shows the distribution of income across different age buckets.", graphTitle: "Age Buckets vs Income", xAxisTitle: "Age Buckets", yAxisTitle: "Income" },
-            { title: "Education Level Distribution", key: "education", type: "pie", paragraph: "This slide shows the distribution of education levels in the dataset.", graphTitle: "Education Level Distribution" },
-            { title: "Education Level Distribution", key: "education", type: "pie", paragraph: "This slide shows the distribution of education levels in the dataset.", graphTitle: "Education Level Distribution" },
-            { title: "Education vs Count of Income", key: "education.num", type: "bar", yKey: "incomeBool", paragraph: "This slide shows the count of income levels across different education levels.", graphTitle: "Education vs Count of Income", xAxisTitle: "Education Level", yAxisTitle: "Count of Income" }
-        ];
 
-const slides = d3.select("#slides")
-    .selectAll(".slide")
-    .data(slidesData)
-    .enter()
-    .append("div")
-    .attr("class", "slide")
-    .attr("id", (d, i) => `slide-${i}`);
-
-slides.each(function(slideData) {
-    // Append title
-    d3.select(this)
-        .append("h2")
-        .text(slideData.title)
-    // Append a paragraph to each slide
-        .append("p")
-        .text(d => d.paragraph)
-    
-    
-    
-    // Append graph title
-        .append("h3").text(slideData.graphTitle);
-    const svg = d3.select(this)
-        .append("svg")
-        .attr("width", width + margin.left + margin.right)
-        .attr("height", height + margin.top + margin.bottom)
-        .append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
-    // Append x-axis title
-    svg.append("text")
-                    .attr("class", "x-axis-title")
-                    .attr("text-anchor", "middle")
-                    .attr("x", width / 2)
-                    .attr("y", height + margin.bottom - 10)
-                    .text(slideData.xAxisTitle);
-
-    // Append y-axis title
-    svg.append("text")
-                    .attr("class", "y-axis-title")
-                    .attr("text-anchor", "middle")
-                    .attr("transform", "rotate(-90)")
-                    .attr("x", -height / 2)
-                    .attr("y", -margin.left + 20)
-                    .text(slideData.yAxisTitle);
-
-    if (slideData.type === "bar") {
-        // Bar chart for Age Buckets vs Income
-        const groupedData = d3.rollup(data, v => v.length, d => d[slideData.key], d => d[slideData.yKey]);
-        const flattenedData = [];
-        groupedData.forEach((incomes, ageBucket) => {
-            incomes.forEach((count, income) => {
-                flattenedData.push({ ageBucket: ageBucket, income: income, count: count });
+            educationSelect.on("change", function() {
+                const selectedEducation = this.value;
+                updateIncomePieChart(selectedEducation);
             });
+
+            // Pie Chart for Income by Education Level
+            function updateIncomePieChart(educationLevel) {
+                const filteredData = data.filter(d => d.education === educationLevel);
+                const incomeCounts = d3.rollup(filteredData, v => v.length, d => d.incomeBool);
+                const incomePieData = Array.from(incomeCounts, ([key, value]) => ({ key, value }));
+
+                const incomePie = d3.pie().value(d => d.value);
+                const incomeArc = d3.arc().innerRadius(0).outerRadius(radius);
+
+                const incomePieChartSvg = d3.select("#incomePieChart").selectAll("*").remove();
+                const incomePieChartGroup = d3.select("#incomePieChart").append("g").attr("transform", `translate(${width / 2},${height / 2})`);
+
+                const incomeSlices = incomePieChartGroup.selectAll("path")
+                    .data(incomePie(incomePieData))
+                    .enter().append("path")
+                    .attr("d", incomeArc)
+                    .attr("fill", d => color(d.data.key))
+                    .on("mouseover", function(event, d) {
+                        d3.select("#tooltip")
+                            .style("opacity", 1)
+                            .html(`Income: ${d.data.key === 1 ? ">=50K" : "<50K"}<br>Frequency: ${d.data.value}`);
+                    })
+                    .on("mousemove", function(event) {
+                        d3.select("#tooltip")
+                            .style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", function() {
+                        d3.select("#tooltip").style("opacity", 0);
+                    });
+            }
+
+            // Initialize with the first education level
+            updateIncomePieChart(educationLevels[0]);
         });
 
-        const x = d3.scaleBand()
-            .domain(flattenedData.map(d => d.ageBucket))
-            .range([0, width])
-            .padding(0.1);
-
-        const y = d3.scaleLinear()
-            .domain([0, d3.max(flattenedData, d => d.count)])
-            .nice()
-            .range([height, 0]);
-
-        svg.append("g")
-            .attr("class", "x-axis")
-            .attr("transform", `translate(0,${height})`)
-            .call(d3.axisBottom(x));
-
-        svg.append("g")
-            .attr("class", "y-axis")
-            .call(d3.axisLeft(y));
-
-        svg.selectAll(".bar")
-            .data(flattenedData)
-            .enter().append("rect")
-            .attr("class", "bar")
-            .attr("x", d => x(d.ageBucket))
-            .attr("y", d => y(d.count))
-            .attr("width", x.bandwidth())
-            .attr("height", d => height - y(d.count))
-            .on("mouseover", function(event, d) {
-                d3.select("#tooltip")
-                    .style("opacity", 1)
-                    .html(`Age Bucket: ${d.ageBucket}<br>Income: ${d.income}<br>Count: ${d.count}`);
-            })
-            .on("mousemove", function(event) {
-                d3.select("#tooltip")
-                    .style("left", (event.pageX + 10) + "px")
-                    .style("top", (event.pageY - 28) + "px");
-            })
-            .on("mouseout", function() {
-                d3.select("#tooltip")
-                    .style("opacity", 0);
+        function showSlide(slideNumber) {
+            const slides = document.querySelectorAll(".slide");
+            slides.forEach((slide, index) => {
+                slide.style.display = (index + 1 === slideNumber) ? "block" : "none";
             });
+        }
 
-    } else if (slideData.type === "pie") {
-    // Pie chart for Education Level Distribution
-    const groupedData = d3.rollup(data, v => v.length, d => d[slideData.key]);
-    const pieData = Array.from(groupedData, ([key, value]) => ({ key, value }));
-
-    const radius = Math.min(width, height) / 2;
-    const pie = d3.pie().value(d => d.value);
-    const arc = d3.arc().innerRadius(0).outerRadius(radius);
-
-    const color = d3.scaleOrdinal(d3.schemeCategory10);
-
-    svg.attr("transform", `translate(${width / 2},${height / 2})`);
-
-    const slices = svg.selectAll("path")
-        .data(pie(pieData))
-        .enter().append("path")
-        .attr("d", arc)
-        .attr("fill", d => color(d.data.key))
-        .on("mouseover", function(event, d) {
-            d3.select("#tooltip")
-                .style("opacity", 1)
-                .html(`Education: ${d.data.key}<br>Count: ${d.data.value}`);
-        })
-        .on("mousemove", function(event) {
-            d3.select("#tooltip")
-                .style("left", (event.pageX + 10) + "px")
-                .style("top", (event.pageY - 28) + "px");
-        })
-        .on("mouseout", function() {
-            d3.select("#tooltip")
-                .style("opacity", 0);
-        });
-
-    // Add labels to each slice
-    svg.selectAll("text")
-        .data(pie(pieData))
-        .enter().append("text")
-        .attr("transform", d => `translate(${arc.centroid(d)})`)
-        .attr("dy", "0.35em")
-        .attr("text-anchor", "middle")
-        .text(d => d.data.key);
-}
-else if (slideData.type === "pie") {
-    // Pie chart for Education Level Distribution
-    const groupedData = d3.rollup(data, v => v.length, d => d[slideData.key]);
-    const pieData = Array.from(groupedData, ([key, value]) => ({ key, value }));
-
-    const radius = Math.min(width, height) / 2;
-    const pie = d3.pie().value(d => d.value);
-    const arc = d3.arc().innerRadius(0).outerRadius(radius);
-
-    const color = d3.scaleOrdinal(d3.schemeCategory10);
-
-    svg.attr("transform", `translate(${width / 2},${height / 2})`);
-
-    svg.selectAll("path")
-        .data(pie(pieData))
-        .enter().append("path")
-        .attr("d", arc)
-        .attr("fill", d => color(d.data.key))
-        .on("mouseover", function(event, d) {
-            d3.select("#tooltip")
-                .style("opacity", 1)
-                .html(`Education: ${d.data.key}<br>Count: ${d.data.value}`);
-        })
-        .on("mousemove", function(event) {
-            d3.select("#tooltip")
-                .style("left", (event.pageX + 10) + "px")
-                .style("top", (event.pageY - 28) + "px");
-        })
-        .on("mouseout", function() {
-            d3.select("#tooltip")
-                .style("opacity", 0);
-        });
-
-    // Create a legend
-    const legend = svg.append("g")
-        .attr("transform", `translate(${width / 2 + radius + 20},${-height / 2})`);
-
-    legend.selectAll("rect")
-        .data(pieData)
-        .enter().append("rect")
-        .attr("x", 0)
-        .attr("y", (d, i) => i * 20)
-        .attr("width", 18)
-        .attr("height", 18)
-        .attr("fill", d => color(d.key));
-
-    legend.selectAll("text")
-        .data(pieData)
-        .enter().append("text")
-        .attr("x", 24)
-        .attr("y", (d, i) => i * 20 + 9)
-        .attr("dy", "0.35em")
-        .text(d => d.key);
-}
-    else if (slideData.type === "bar") {
-        // Bar chart for education num vs income
-        const groupedData = d3.rollup(data, v => v.length, d => d[slideData.key], d => d[slideData.yKey]);
-        const flattenedData = [];
-        groupedData.forEach((edNum, incomeBool) => {
-            edNum.forEach((count, income) => {
-                flattenedData.push({ edNum: edNum, incomeBool: incomeBool, count: count });
-            });
-        });
-
-        const x = d3.scaleBand()
-            .domain(flattenedData.map(d => d.edNum))
-            .range([0, width])
-            .padding(0.1);
-
-        const y = d3.scaleLinear()
-            .domain([0, d3.max(flattenedData, d => d.count)])
-            .nice()
-            .range([height, 0]);
-
-        svg.append("g")
-            .attr("class", "x-axis")
-            .attr("transform", `translate(0,${height})`)
-            .call(d3.axisBottom(x));
-
-        svg.append("g")
-            .attr("class", "y-axis")
-            .call(d3.axisLeft(y));
-
-        svg.selectAll(".bar")
-            .data(flattenedData)
-            .enter().append("rect")
-            .attr("class", "bar")
-            .attr("x", d => x(d.edNum))
-            .attr("y", d => y(d.count))
-            .attr("width", x.bandwidth())
-            .attr("height", d => height - y(d.count))
-            .on("mouseover", function(event, d) {
-                d3.select("#tooltip")
-                    .style("opacity", 1)
-                    .html(`Education Level: ${d.edNum}<br>Income: ${d.incomeBool}<br>Count: ${d.count}`);
-            })
-            .on("mousemove", function(event) {
-                d3.select("#tooltip")
-                    .style("left", (event.pageX + 10) + "px")
-                    .style("top", (event.pageY - 28) + "px");
-            })
-            .on("mouseout", function() {
-                d3.select("#tooltip")
-                    .style("opacity", 0);
-            });
-
-    }
-});
-
-// Slideshow functionality
-let currentSlide = 0;
-const slidesArray = d3.selectAll(".slide").nodes();
-
-function showSlide(index) {
-    slidesArray.forEach((slide, i) => {
-        slide.classList.toggle("active-slide", i === index);
-    });
-}
-
-document.getElementById("prev").addEventListener("click", () => {
-    currentSlide = (currentSlide > 0) ? currentSlide - 1 : slidesArray.length - 1;
-    showSlide(currentSlide);
-});
-
-document.getElementById("next").addEventListener("click", () => {
-    currentSlide = (currentSlide < slidesArray.length - 1) ? currentSlide + 1 : 0;
-    showSlide(currentSlide);
-});
-
-// Ensure the first slide is shown by default
-if (slidesArray.length > 0) {
-    slidesArray[0].classList.add("active-slide");
-}
-
-showSlide(currentSlide);
-}).catch(error => {
-    console.error('Error fetching the CSV data:', error);
-});
-</script>
+        // Show the first slide initially
+        showSlide(1);
+    </script>
 </body>
 </html>
